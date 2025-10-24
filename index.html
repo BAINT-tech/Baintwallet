@@ -34,7 +34,7 @@
           const [isLoading, setIsLoading] = useState(false);
 
           const chains = [
-            { id: 'ETH', name: 'Ethereum', symbol: 'ETH', color: 'from-blue-500 to-purple-600', mainnetRPC: 'https://eth.llamarpc.com', testnetRPC: 'https://rpc.sepolia.org', explorer: 'https://etherscan.io', testnetExplorer: 'https://sepolia.etherscan.io', type: 'EVM' },
+            { id: 'ETH', name: 'Ethereum', symbol: 'ETH', color: 'from-blue-500 to-purple-600', mainnetRPC: 'https://eth.llamarpc.com', testnetRPC: 'https://ethereum-sepolia-rpc.publicnode.com', explorer: 'https://etherscan.io', testnetExplorer: 'https://sepolia.etherscan.io', type: 'EVM' },
             { id: 'AVAX', name: 'Avalanche', symbol: 'AVAX', color: 'from-red-500 to-pink-600', mainnetRPC: 'https://api.avax.network/ext/bc/C/rpc', testnetRPC: 'https://api.avax-test.network/ext/bc/C/rpc', explorer: 'https://snowtrace.io', testnetExplorer: 'https://testnet.snowtrace.io', type: 'EVM' },
             { id: 'BASE', name: 'Base', symbol: 'ETH', color: 'from-blue-600 to-indigo-700', mainnetRPC: 'https://mainnet.base.org', testnetRPC: 'https://sepolia.base.org', explorer: 'https://basescan.org', testnetExplorer: 'https://sepolia.basescan.org', type: 'EVM' },
             { id: 'BNB', name: 'BNB Chain', symbol: 'BNB', color: 'from-yellow-400 to-yellow-600', mainnetRPC: 'https://bsc-dataseed.binance.org', testnetRPC: 'https://data-seed-prebsc-1-s1.binance.org:8545', explorer: 'https://bscscan.com', testnetExplorer: 'https://testnet.bscscan.com', type: 'EVM' }
@@ -79,17 +79,46 @@
               setIsLoading(true);
               const chainData = chains.find(c => c.id === chain);
               const rpc = isTestnet ? chainData.testnetRPC : chainData.mainnetRPC;
+              
+              console.log('Fetching balance for:', address);
+              console.log('Using RPC:', rpc);
+              
               const response = await fetch(rpc, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [address, 'latest'] })
               });
+              
               const data = await response.json();
-              if (data.error) { console.error('RPC Error:', data.error); return '0.0000'; }
+              console.log('RPC Response:', data);
+              
+              if (data.error) { 
+                console.error('RPC Error:', data.error); 
+                alert('RPC Error: ' + data.error.message + '\n\nTrying backup RPC...');
+                
+                // Try backup RPC
+                const backupRPC = 'https://rpc2.sepolia.org';
+                const backupResponse = await fetch(backupRPC, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [address, 'latest'] })
+                });
+                const backupData = await backupResponse.json();
+                console.log('Backup RPC Response:', backupData);
+                
+                if (backupData.result) {
+                  const balance = parseInt(backupData.result, 16) / 1e18;
+                  return balance.toFixed(4);
+                }
+                return '0.0000'; 
+              }
+              
               const balance = data.result ? parseInt(data.result, 16) / 1e18 : 0;
+              console.log('Balance (ETH):', balance);
               return balance.toFixed(4);
             } catch (error) {
               console.error('Balance fetch error:', error);
+              alert('Error fetching balance: ' + error.message + '\n\nPlease check console for details.');
               return '0.0000';
             } finally {
               setIsLoading(false);
@@ -348,7 +377,10 @@
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <label className="text-sm font-medium text-gray-700">Wallet Address ({currentChain.id})</label>
-                            <button onClick={() => copyToClipboard(currentAddress, 'address')} className="text-purple-600 hover:text-purple-700 text-sm">{copied === 'address' ? '✅ Copied!' : '📋 Copy'}</button>
+                            <div className="flex gap-2">
+                              <button onClick={() => copyToClipboard(currentAddress, 'address')} className="text-purple-600 hover:text-purple-700 text-sm">{copied === 'address' ? '✅ Copied!' : '📋 Copy'}</button>
+                              <a href={`${isTestnet ? currentChain.testnetExplorer : currentChain.explorer}/address/${currentAddress}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700 text-sm">🔍 Explorer</a>
+                            </div>
                           </div>
                           <div className="bg-gray-100 rounded-lg p-3 font-mono text-sm break-all">{currentAddress}</div>
                         </div>
